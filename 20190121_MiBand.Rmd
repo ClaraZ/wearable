@@ -1,0 +1,122 @@
+---
+title: "20190121_MiBand"
+author: "Clara"
+date: '2019-01-14'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,message=FALSE,warning = FALSE)
+```
+
+## Sleep Periodiocity
+```{r cars}
+sleep=read.csv("Ben's 30-day sleep.csv")
+
+library(scales)
+library(xts)
+library(data.table)
+library(ggplot2)
+library(zoo)
+require(dplyr)
+library(chron) 
+
+sleep$SStart=strptime(sleep$SleepStart,"%Y-%m-%d %H:%M")
+sleep$SEnd=strptime(sleep$SleepEnd,"%Y-%m-%d %H:%M")
+
+sleep$midtime <- as.POSIXct((as.numeric(sleep$SStart) + as.numeric(sleep$SEnd)) / 2, origin = '1970-01-01')
+
+# create chron object "times"
+sleep$onlytime <- times(strftime(sleep$midtime,"%H:%M:%S"))
+sleep_update=subset(sleep,sleep$SStart!=sleep$SEnd)
+summary(sleep_update$onlytime) 
+std=chron::times(sd(chron::times(sleep_update$onlytime)))
+std
+sleep_update$within1std=((mean(sleep_update$onlytime)-std < sleep_update$onlytime) & (mean(sleep_update$onlytime)+std > sleep_update$onlytime))
+# 5 out of 15 days the patient mid-time slept later or earlier within one standard deviation
+```
+
+## Sleep Latency
+```{r}
+raw=read.csv('L1extract_raw.csv')
+raw$time=strptime(raw$time,"%Y-%m-%d %H:%M")
+plus1204=read.csv("Ben's PA data 1128to1205.csv")
+plus1204$time=strptime(plus1204$time,"%Y-%m-%d %H:%M")
+plus1204$description=ifelse(plus1204$description=='Walk'|plus1204$description=="Run",'active',as.character(plus1204$description))
+data1204=subset(plus1204,as.Date(plus1204$time)=="2018-12-04")
+raw_plus1204=rbind(subset(raw,as.Date(raw$time) %in% as.Date(sleep_update$Date)),data1204)
+
+#actualSStartindex=vector("list", 15)
+#for (i in 1:15) {
+  #actualSStartindex[[i]]=match('Sleep',raw_plus1204$description[as.Date(raw_plus1204$time)==as.Date(sleep_update$Date[i])])
+#}
+
+sleep_update$latency[1]=difftime(raw_plus1204$time[min(which(raw_plus1204$description[as.Date(raw_plus1204$time)=='2017-04-08']=='Sleep'))],sleep_update$SStart[1],units = 'min')
+sleep_update$latency[2]=difftime(raw_plus1204$time[as.Date(raw_plus1204$time)=='2017-04-09'][226],sleep_update$SStart[2],units = 'min')
+sleep_update$latency[3]=difftime(raw_plus1204$time[as.Date(raw_plus1204$time)=='2017-04-10'][172],sleep_update$SStart[3],units = 'min')
+sleep_update$latency[4]=difftime(raw_plus1204$time[as.Date(raw_plus1204$time)=='2017-08-04'][76],sleep_update$SStart[4],units = 'min')
+sleep_update$latency[5]=difftime(raw_plus1204$time[as.Date(raw_plus1204$time)=='2017-08-10'][23],sleep_update$SStart[5],units = 'min')
+sleep_update$latency[6]=difftime(raw_plus1204$time[as.Date(raw_plus1204$time)=='2017-08-11'][18],sleep_update$SStart[6],units = 'min')
+sleep_update$latency[7]=difftime(raw_plus1204$time[as.Date(raw_plus1204$time)=='2017-08-12'][189],sleep_update$SStart[7],units = 'min')
+sleep_update$latency[8]=difftime(raw_plus1204$time[as.Date(raw_plus1204$time)=='2017-08-15'][45],sleep_update$SStart[8],units = 'min')
+sleep_update$latency[9]=difftime(raw_plus1204$time[as.Date(raw_plus1204$time)=='2017-08-16'][50],sleep_update$SStart[9],units = 'min')
+sleep_update$latency[10]=difftime(raw_plus1204$time[as.Date(raw_plus1204$time)=='2017-08-17'][141],sleep_update$SStart[10],units = 'min')
+sleep_update$latency[11]=difftime(raw_plus1204$time[as.Date(raw_plus1204$time)=='2017-08-18'][22],sleep_update$SStart[11],units = 'min')
+sleep_update$latency[12]=difftime(raw_plus1204$time[as.Date(raw_plus1204$time)=='2017-08-19'][1],sleep_update$SStart[12],units = 'min')
+sleep_update$latency[13]=difftime(raw_plus1204$time[as.Date(raw_plus1204$time)=='2017-08-20'][136],sleep_update$SStart[13],units = 'min')
+sleep_update$latency[14]=difftime(raw_plus1204$time[as.Date(raw_plus1204$time)=='2017-08-21'][163],sleep_update$SStart[14],units = 'min')
+sleep_update$latency[15]=difftime(raw_plus1204$time[as.Date(raw_plus1204$time)=='2018-12-04'][178],sleep_update$SStart[15],units = 'min')
+
+```
+Question: is it likely to be, if today the patient goes to sleep earlier than yesterday/these days/usual, then today's sleep latency would be higher ?
+
+## Generalized estimating equations (GEE) & Generalized linear mixed-effects model(GLMM)
+
+Are strategies for longitudinal data analysis. 
+Repeated measures: Include all data in a regression model for the mean response and account for longitudinal and/or cluster correlation
+
+GEE: 
+Contrast average outcome values across populations of individuals ⋆ defined by covariate values, while accounting for correlation
+```{r}
+#geeglm
+#Specified by a mean model and a correlation model
+#mean model assumptions：
+#1.observations are independent across subjects
+#2. observations could be correlated within subjects
+```
+
+GLMM:
+Contrast outcomes both within and between individuals
+• Assume that each subject has a regression model characterized by subject-specific parameters: a combination of fixed-effects parameters common to all individuals in the population and random-effects parameters unique to each individual subject
+• Although covariates allow for differences across subjects, typically cannot measure all factors that give rise to subject-specific variation
+```{r}
+#GEE should be our case, but is our data longitudinal data or cross-sectional data? 
+```
+
+## Reclassification of 'idles with non-zero steps' using Amelia
+
+Assume it's cross-sectional data
+```{r}
+require(Amelia)
+
+setwd("/Users/xiaoyingzhang/Desktop/My Research with Ben")
+raw$RawSensorData=ifelse(raw$description=="Idle"&raw$steps!=0&raw$RawSensorData>46,NA,raw$RawSensorData)
+hist(raw$RawSensorData,breaks=100)
+raw$time=strptime(raw$time,"%Y-%m-%d %H:%M")
+#raw$time=unlist(raw$time)
+
+library(lubridate)
+raw_update=ts(raw)
+a.out2 <- amelia(as.data.frame(raw_update), m=5,ts = "time",ords = 'description',lags = "RawSensorData",leads = "RawSensorData")
+a.out2
+save(a.out2, file = "imputations.RData")
+# the ith imputed datasets can be retrieved from this list as a.out$imputations[[i]].
+# In addition, save each of the imputed datasets to its own file:
+write.amelia(obj=a.out2, file.stem = "outdata")
+
+```
+
+See excel file Reclassified for results.
+Max difference: 60
+Mean difference: -0.13
+Std: 5.62
